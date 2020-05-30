@@ -1,8 +1,9 @@
 # 基本使用
 
 
-## 启动VNTrader
-### VN Station模式
+## 启动程序
+
+### 图形模式
 登陆VN Station后，点击VN Trade Lite快速进入VN Trader（只有CTP接口）；或者点击VN Trader Pro先选择如下图的底层接口和上层应用，再进入VN Trader。
 
 ![](https://vnpy-community.oss-cn-shanghai.aliyuncs.com/forum_experience/yazhang/quick_start/VnTrader_Pro.png "enter image title here")
@@ -11,7 +12,7 @@
 
 ### 脚本模式
 
-在文件夹tests\trader中找到run.py文件。按住“Shift” + 鼠标右键进入cmd窗口，输入下面命令进入如图VN Trader
+在文件夹example\trader中找到run.py文件(不是vnstudio下的，需要在github上单独下载）。按住“Shift” + 鼠标右键进入cmd窗口，输入下面命令进入如图VN Trader
 ```
 python run.py 
 ```
@@ -20,15 +21,16 @@ python run.py
 &nbsp;
 
 ## 连接接口
+### SimNow仿真
+
 以SinNow仿真交易账号登陆CTP接口为例：点击菜单栏的“系统”->“连接CTP”后，弹出如上图所示CTP接口的配置对话框，输入以下内容后即可登录：
 - 用户名username：111111 （6位纯数字账号）
 - 密码password：1111111  （需要修改一次密码用于盘后测试）
 - 经纪商编号brokerid：9999 （SimNow默认经纪商编号）
-- 交易服务器地址td_address：180.168.146.187:10030 （盘后测试）
-- 行情服务器地址md_address：180.168.146.187:10031 （盘后测试）
-- auth_code和product_info主要用于19年中的CTP接入验证，目前留空即可
-
-注意：若使用期货实盘账户，需要问清楚其brokerid、auth_code和product_info; 并且仿真交易需要另外申请开通。
+- 交易服务器地址td_address：218.202.237.33 :10102 （盘中测试）
+- 行情服务器地址md_address：218.202.237.33 :10112 （盘中测试）
+- 授权码auth_code：0000000000000000（16个0）
+- 名称app_id：simnow_client_test
 
 连接成功以后，日志组件会立刻输出陆成功相关信息，同时用户也可以看到账号信息，持仓信息，合约查询等相关信息。
 
@@ -39,6 +41,7 @@ python run.py
 
 此时行情组件会显示最新行情信息；交易组件会显示合约名称，并且在下方显示深度行情报价：如最新价、买一价、卖一价。（数字货币品种可以显示十档行情）
 
+注意：订阅行情填写的代码格式可以由菜单栏的”帮助“->“查询合约”里查到
 ![](https://vnpy-community.oss-cn-shanghai.aliyuncs.com/forum_experience/yazhang/quick_start/subcribe_contract.png "enter image title here")
 
 
@@ -132,44 +135,22 @@ python run.py
 &nbsp;
 
 ## 应用模块
-vnpy官方目前提供2个应用模块组件，分别是用于自动交易的“CTA策略”组件；把第三方数据文件导入到数据库的“CSV载入”组件。在菜单栏中点击“功能”，即显示应用模块，如下图：
+
+vn.py官方提供了开箱即用的量化交易应用模块，在菜单栏中点击“功能”，即显示应用模块，如下图：
 
 ![](https://vnpy-community.oss-cn-shanghai.aliyuncs.com/forum_experience/yazhang/quick_start/application.png "enter image title here")
 
-### CTA策略
-CTA策略组件默认使用RQData的数据进行自动交易，故需要配置好RQData相关数据。
-
-1） 在用户目录下.vntrader文件夹找到vt_setting.json，输入RQData的账号和密码，保存退出后启动CTA策略组件，会显示“RQData数据接口初始化成功”，如图：
-
-![](https://vnpy-community.oss-cn-shanghai.aliyuncs.com/forum_experience/yazhang/quick_start/RQData.png "enter image title here")
-
-
-2）在左上方的菜单栏选择策略，如“AtrRsiStrategy”，然后点击右边的“添加策略”按钮，用于策略实例创建，选择策略适用品种和修改该测试示例的参数，如图：
-
-![](https://vnpy-community.oss-cn-shanghai.aliyuncs.com/forum_experience/yazhang/quick_start/trader_2.PNG "enter image title here")
-
-
-3）每一个策略示例都有其“初始化”、“启动”、“停止”、“编辑”、“移除”按钮。注意在启动策略前必须先初始化，移除策略前需要先停止策略。右上方菜单栏有批量处理功能，方便用户快速启动、停止策略，如图：
-   
-![](https://vnpy-community.oss-cn-shanghai.aliyuncs.com/forum_experience/yazhang/quick_start/turtle_strategy.png "enter image title here")
-
-
 &nbsp;
 
+## 全局配置
 
-### CSV载入
-CSV文件是用户最主要的历史数据来源之一，用户只需根据CSV文件中的表头字段，以及时间格式灵活配置，即可实现一键载入历史数据。
+在菜单栏中点击“配置”，可以进行全局配置：如配置GUI界面字体的大小，类型，数据库种类，RQData的账户密码（用于初始化RQData客户端，下载历史数据，或者盘起载入数据来初始化策略），设置email来发送信息。
 
-CSV载入操作分为3步：
+其email的设置如下：
+email.server: SMTP邮件服务器地址
+email.port: SMTP邮件服务器端口号
+email.username: 邮箱用户名
+email.password: 邮箱密码
+email.sender: 发送者邮箱
+email.receiver: 接收者邮箱
 
-1）打开CSV文件，查看表头字段以及时间格式，如图：
-
-![](https://vnpy-community.oss-cn-shanghai.aliyuncs.com/forum_experience/yazhang/quick_start/csv_format.png "enter image title here")
-
-2）点击菜单栏的“功能”->“CSV载入”，进入界面后选择要载入的CSV文件，并且修改相关表头字段和时间格式（若有需要的话）。如下图：
-
-![](https://vnpy-community.oss-cn-shanghai.aliyuncs.com/forum_experience/yazhang/quick_start/csv_loader.png "enter image title here")
-
-3）点击“载入数据”后，成功界面如下图所示。
-
-![](https://vnpy-community.oss-cn-shanghai.aliyuncs.com/forum_experience/yazhang/quick_start/exito_csv_load.png "enter image title here")

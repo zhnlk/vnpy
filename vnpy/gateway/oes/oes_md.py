@@ -5,14 +5,15 @@ from gettext import gettext as _
 from threading import Thread
 # noinspection PyUnresolvedReferences
 from typing import Any, Callable, Dict
+import pytz
 
 from vnpy.api.oes.vnoes import MdsApiClientEnvT, MdsApi_DestoryAll, MdsApi_InitLogger, \
-    MdsApi_InitTcpChannel2, MdsApi_LogoutAll, MdsApi_SetThreadPassword, \
-    MdsApi_SetThreadUsername, MdsApi_SubscribeMarketData, MdsApi_WaitOnMsg, MdsL2StockSnapshotBodyT, \
-    MdsMktDataRequestEntryT, MdsMktDataRequestReqBufT, MdsMktDataRequestReqT, MdsMktRspMsgBodyT, \
-    MdsStockSnapshotBodyT, SGeneralClientChannelT, SMsgHeadT, cast, \
-    eMdsExchangeIdT, eMdsMktSubscribeFlagT, eMdsMsgTypeT, eMdsSecurityTypeT, eMdsSubscribeDataTypeT, \
-    eMdsSubscribeModeT, eMdsSubscribedTickExpireTypeT, eMdsSubscribedTickTypeT, eSMsgProtocolTypeT
+    MdsApi_InitTcpChannel2, MdsApi_LogoutAll, MdsApi_SetThreadPassword, MdsApi_SetThreadUsername, \
+    MdsApi_SubscribeMarketData, MdsApi_WaitOnMsg, MdsL2StockSnapshotBodyT, MdsMktDataRequestEntryT, \
+    MdsMktDataRequestReqBufT, MdsMktDataRequestReqT, MdsMktRspMsgBodyT, MdsStockSnapshotBodyT, \
+    SGeneralClientChannelT, SMsgHeadT, caster, eMdsExchangeIdT, eMdsMktSubscribeFlagT, eMdsMsgTypeT, \
+    eMdsMdProductTypeT, eMdsSubscribeDataTypeT, eMdsSubscribeModeT, eMdsSubscribedTickExpireTypeT, \
+    eMdsSubscribedTickTypeT, eSMsgProtocolTypeT
 
 from vnpy.gateway.oes.utils import create_remote_config, is_disconnected
 from vnpy.trader.constant import Exchange
@@ -25,6 +26,8 @@ EXCHANGE_MDS2VT = {
     eMdsExchangeIdT.MDS_EXCH_SZSE: Exchange.SZSE,
 }
 EXCHANGE_VT2MDS = {v: k for k, v in EXCHANGE_MDS2VT.items()}
+
+CHINA_TZ = pytz.timezone("Asia/Shanghai")
 
 
 class OesMdMessageLoop:
@@ -93,7 +96,7 @@ class OesMdMessageLoop:
                 gateway_name=self.gateway.gateway_name,
                 symbol=symbol,
                 exchange=self.symbol_to_exchange[symbol],
-                datetime=datetime.utcnow()
+                datetime=datetime.now(CHINA_TZ)
             )
             self.last_tick[symbol] = tick
             return tick
@@ -103,7 +106,7 @@ class OesMdMessageLoop:
                     body: Any):
         """"""
         if session_info.protocolType == eSMsgProtocolTypeT.SMSG_PROTO_BINARY:
-            b = cast.toMdsMktRspMsgBodyT(body)
+            b = caster.toMdsMktRspMsgBodyT(body)
             if head.msgId in self.message_handlers:
                 # self.gateway.write_log(
                 #     f"msg id : {head.msgId}   {eMdsMsgTypeT(head.msgId)}")
@@ -144,8 +147,10 @@ class OesMdMessageLoop:
 
         for i in range(min(data.BidPriceLevel, 5)):
             tick.__dict__['bid_price_' + str(i + 1)] = data.BidLevels[i].Price / 10000
+            tick.__dict__['bid_volume_' + str(i + 1)] = data.BidLevels[i].QrderQty / 100
         for i in range(min(data.OfferPriceLevel, 5)):
             tick.__dict__['ask_price_' + str(i + 1)] = data.OfferLevels[i].Price / 10000
+            tick.__dict__['ask_volume_' + str(i + 1)] = data.OfferLevels[i].QrderQty / 100
         self.gateway.on_tick(copy(tick))
 
     def on_init_tick(self, d: MdsMktRspMsgBodyT):
@@ -160,8 +165,10 @@ class OesMdMessageLoop:
 
         for i in range(5):
             tick.__dict__['bid_price_' + str(i + 1)] = data.BidLevels[i].Price / 10000
+            tick.__dict__['bid_volume_' + str(i + 1)] = data.BidLevels[i].QrderQty / 100
         for i in range(5):
             tick.__dict__['ask_price_' + str(i + 1)] = data.OfferLevels[i].Price / 10000
+            tick.__dict__['ask_volume_' + str(i + 1)] = data.OfferLevels[i].QrderQty / 100
         self.gateway.on_tick(copy(tick))
 
     def on_l2_trade(self, d: MdsMktRspMsgBodyT):
@@ -169,7 +176,7 @@ class OesMdMessageLoop:
         data = d.trade
         symbol = data.SecurityID
         tick = self._get_last_tick(symbol)
-        tick.datetime = datetime.utcnow()
+        tick.datetime = datetime.now(CHINA_TZ)
         tick.volume = data.TradeQty
         tick.last_price = data.TradePrice / 10000
         self.gateway.on_tick(copy(tick))
@@ -296,7 +303,7 @@ class OesMdApi:
         mds_req.subSecurityCnt = 1
 
         entry.exchId = EXCHANGE_VT2MDS[req.exchange]
-        entry.securityType = eMdsSecurityTypeT.MDS_SECURITY_TYPE_STOCK  # todo: option and others
+        entry.mdProductType = eMdsMdProductTypeT.MDS_SECURITY_TYPE_STOCK  # todo: option and others
         entry.instrId = int(req.symbol)
 
         self._message_loop.register_symbol(req.symbol, req.exchange)

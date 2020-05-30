@@ -1,23 +1,25 @@
 import time
 from copy import copy
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 from gettext import gettext as _
 from threading import Lock, Thread
 # noinspection PyUnresolvedReferences
 from typing import Any, Callable, Dict
+import pytz
 
 from vnpy.api.oes.vnoes import OesApiClientEnvT, OesApiSubscribeInfoT, OesApi_DestoryAll, \
     OesApi_InitLogger, OesApi_InitOrdChannel2, OesApi_InitQryChannel2, OesApi_InitRptChannel2, \
-    OesApi_LogoutAll, OesApi_QueryCashAsset, \
-    OesApi_QueryOptHolding, OesApi_QueryOption, OesApi_QueryOrder, OesApi_QueryStkHolding, \
-    OesApi_QueryStock, OesApi_SendOrderCancelReq, OesApi_SendOrderReq, OesApi_SetCustomizedDriverId, \
+    OesApi_LogoutAll, OesApi_QueryCashAsset, OesApi_QueryOptHolding, OesApi_QueryOption, \
+    OesApi_QueryOrder, OesApi_QueryStkHolding, OesApi_QueryStock, OesApi_SendOrderCancelReq, \
+    OesApi_SendOrderReq, OesApi_SetCustomizedDriverId, OesApi_SetCustomizedIpAndMac, \
     OesApi_SetThreadPassword, OesApi_SetThreadUsername, OesApi_WaitReportMsg, OesOrdCancelReqT, \
     OesOrdCnfmT, OesOrdRejectT, OesOrdReqT, OesQryCashAssetFilterT, OesQryCursorT, \
     OesQryOptionFilterT, OesQryOrdFilterT, OesQryStkHoldingFilterT, OesQryStockFilterT, \
     OesRspMsgBodyT, OesStockBaseInfoT, OesTrdCnfmT, SGeneralClientChannelT, SMSG_PROTO_BINARY, \
-    SMsgHeadT, cast, eOesBuySellTypeT, eOesMarketIdT, eOesMsgTypeT, \
-    eOesOrdStatusT, eOesOrdTypeShT, eOesOrdTypeSzT, eOesSubscribeReportTypeT
+    SMsgHeadT, caster, eOesBuySellTypeT, eOesMarketIdT, eOesMsgTypeT, eOesOrdStatusT, \
+    eOesOrdTypeShT, eOesOrdTypeSzT, eOesSubscribeReportTypeT
+
 from vnpy.gateway.oes.error_code import error_to_str
 from vnpy.gateway.oes.utils import create_remote_config, is_disconnected
 from vnpy.trader.constant import Direction, Exchange, Offset, OrderType, Product, Status
@@ -91,7 +93,7 @@ STATUS_OES2VT = {
     eOesOrdStatusT.OES_ORD_STATUS_INVALID_SZ_TRY_AGAIN: Status.REJECTED,
 }
 
-bjtz = timezone(timedelta(hours=8))
+CHINA_TZ = pytz.timezone("Asia/Shanghai")
 
 
 @dataclass
@@ -112,7 +114,7 @@ def parse_oes_datetime(date: int, time: int):
     minute = int((time % 10000000) / 100000)
     sec = int((time % 100000) / 1000)
     mill = int(time % 1000)
-    return datetime(year, month, day, hour, minute, sec, mill * 1000, tzinfo=bjtz)
+    return datetime(year, month, day, hour, minute, sec, mill * 1000, tzinfo=CHINA_TZ)
 
 
 class OesTdMessageLoop:
@@ -170,7 +172,7 @@ class OesTdMessageLoop:
                     body: Any):
         """"""
         if session_info.protocolType == SMSG_PROTO_BINARY:
-            b = cast.toOesRspMsgBodyT(body)
+            b = caster.toOesRspMsgBodyT(body)
             if head.msgId in self.message_handlers:
                 self.message_handlers[head.msgId](b)
             else:
@@ -252,7 +254,7 @@ class OesTdMessageLoop:
             offset=vt_order.offset,
             price=data.trdPrice / 10000,
             volume=data.trdQty,
-            time=parse_oes_datetime(data.trdDate, data.trdTime).isoformat()
+            datetime=parse_oes_datetime(data.trdDate, data.trdTime)
         )
         vt_order.status = STATUS_OES2VT[data.ordStatus]
         vt_order.traded = data.cumQty
@@ -310,6 +312,8 @@ class OesTdApi:
         self.username: str = ''
         self.password: str = ''
         self.hdd_serial: str = ''
+        self.customize_ip: str = ''
+        self.customize_mac: str = ''
 
         self.gateway = gateway
 
@@ -331,6 +335,8 @@ class OesTdApi:
         :note set config_path before calling this function
         """
         OesApi_InitLogger(self.config_path, 'log')
+
+        OesApi_SetCustomizedIpAndMac(self.customize_ip, self.customize_mac)
 
         OesApi_SetCustomizedDriverId(self.hdd_serial)
 
@@ -433,7 +439,7 @@ class OesTdApi:
                        cursor: OesQryCursorT,
                        ):
         """"""
-        data = cast.toOesCashAssetItemT(body)
+        data = caster.toOesCashAssetItemT(body)
         balance = data.currentTotalBal / 10000
         availiable = data.currentAvailableBal / 10000
         # drawable = data.currentDrawableBal
@@ -460,7 +466,7 @@ class OesTdApi:
                        cursor: OesQryCursorT,
                        ):
         """"""
-        data: OesStockBaseInfoT = cast.toOesStockItemT(body)
+        data: OesStockBaseInfoT = caster.toOesStockItemT(body)
         contract = ContractData(
             gateway_name=self.gateway.gateway_name,
             symbol=data.securityId,
@@ -468,6 +474,7 @@ class OesTdApi:
             name=data.securityName,
             product=PRODUCT_OES2VT[data.mktId],
             size=data.buyQtyUnit,
+            min_volume=100,
             net_position=True,
             pricetick=data.priceUnit,
         )
@@ -490,7 +497,7 @@ class OesTdApi:
                         cursor: OesQryCursorT,
                         ):
         """"""
-        data = cast.toOesOptionItemT(body)
+        data = caster.toOesOptionItemT(body)
         contract = ContractData(
             gateway_name=self.gateway.gateway_name,
             symbol=data.securityId,
@@ -519,7 +526,7 @@ class OesTdApi:
                                cursor: OesQryCursorT,
                                ):
         """"""
-        data = cast.toOesStkHoldingItemT(body)
+        data = caster.toOesStkHoldingItemT(body)
 
         position = PositionData(
             gateway_name=self.gateway.gateway_name,
@@ -553,7 +560,7 @@ class OesTdApi:
                          cursor: OesQryCursorT,
                          ):
         """"""
-        data = cast.toOesOptHoldingItemT(body)
+        data = caster.toOesOptHoldingItemT(body)
 
         # 权利
         pos_long = PositionData(
@@ -672,7 +679,7 @@ class OesTdApi:
                        body: Any,
                        cursor: OesQryCursorT):
         """"""
-        data: OesOrdCnfmT = cast.toOesOrdItemT(body)
+        data: OesOrdCnfmT = caster.toOesOrdItemT(body)
 
         i = self._order_manager.get_order(data.clSeqNo)
         vt_order = i.vt_order
@@ -698,13 +705,14 @@ class OesTdApi:
                         cursor: OesQryCursorT,
                         ):
         """"""
-        data: OesOrdCnfmT = cast.toOesOrdItemT(body)
+        data: OesOrdCnfmT = caster.toOesOrdItemT(body)
         vt_order = self._order_manager.oes_order_to_vt(data)
         self.gateway.on_order(vt_order)
         return 1
 
 
 class OrderManager:
+
     def __init__(self, gateway_name: str):
         self._orders: Dict[int, InternalOrder] = {}
         self.gateway_name = gateway_name
@@ -741,7 +749,7 @@ class OrderManager:
                     data.ordStatus],
 
                 # this time should be generated automatically or by a static function
-                time=parse_oes_datetime(data.ordDate, data.ordCnfmTime).isoformat(),
+                datetime=parse_oes_datetime(data.ordDate, data.ordCnfmTime),
             )
             self.save_order(order_id, vt_order)
         return vt_order
